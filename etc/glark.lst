@@ -1,0 +1,4 @@
+./doc/glark.txt
+./etc/glark.lst
+./plugin/glark.vim
+./syntax/glark.vim
