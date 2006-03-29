@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     25-Jän-2006.
-" @Last Change: 25-Jan-2006.
-" @Revision:    0.18
+" @Last Change: 28-Mär-2006.
+" @Revision:    0.35
 
 if version < 600
     syntax clear
@@ -12,9 +12,16 @@ elseif exists("b:current_syntax")
     finish
 endif
 
+syntax match GlarkComment /^\* .*$/
 syntax match GlarkFilename /^\S.*$/
-syntax match GlarkMatchingLine /^\s\+\d\+ \(: \)\?/
-syntax match GlarkContextLine /^\s\+\d\+ [+-] /
+" syntax match GlarkMatchingLine /^\s\+\d\+ \(: \)\?/ nextgroup=GlarkMatchingHead
+" syntax match GlarkMatchingHead /.*$/
+" syntax match GlarkLine /^\s\+\d\+ [+-] / nextgroup=GlarkHead
+" syntax match GlarkHead /.*$/
+syntax region GlarkLine matchgroup=GlarkHead start=/^\s\+\d\+ \([+-] \)\?/ end=/$/ contains=GlarkMatch
+syntax region GlarkMatchingLine matchgroup=GlarkMatchingHead start=/^\s\+\d\+ : / end=/$/ contains=GlarkMatch
+
+call GlarkParseExplain()
 
 if version >= 508 || !exists("did_glark_syntax_inits")
   if version < 508
@@ -24,9 +31,12 @@ if version >= 508 || !exists("did_glark_syntax_inits")
     command! -nargs=+ HiLink hi def link <args>
   endif
  
+  HiLink GlarkComment Comment
   HiLink GlarkFilename Title
-  HiLink GlarkMatchingLine DiffChange
-  HiLink GlarkContextLine LineNr
+  HiLink GlarkMatchingLine Special
+  HiLink GlarkMatchingHead DiffChange
+  " HiLink GlarkLine Comment
+  HiLink GlarkHead LineNr
   HiLink GlarkMatch Search
 
   delcommand HiLink

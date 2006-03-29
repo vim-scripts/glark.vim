@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     25-Jän-2006.
-" @Last Change: 05-Feb-2006.
-" @Revision:    0.1.158
+" @Last Change: 29-Mrz-2006.
+" @Revision:    0.2.271
 
 if &cp || exists("loaded_glark") "{{{2
     finish
@@ -12,8 +12,9 @@ endif
 let loaded_glark = 1
 
 if !exists('g:glarkCommand')  | let g:glarkCommand = 'glark'    | endif "{{{2
-if !exists('g:glarkArgs')     | let g:glarkArgs = '-q -n -H -U' | endif "{{{2
-if !exists('g:glarkHeight')   | let g:glarkHeight = &lines / 2  | endif "{{{2
+if !exists('g:glarkArgs')     | let g:glarkArgs = '-q -n -H -U --explain' | endif "{{{2
+" if !exists('g:glarkHeight')   | let g:glarkHeight = &lines / 2  | endif "{{{2
+if !exists('g:glarkHeight')   | let g:glarkHeight = 0           | endif "{{{2
 if !exists('g:glarkMultiWin') | let g:glarkMultiWin = 0         | endif "{{{2
 
 fun! <SID>GetLineNumber() "{{{3
@@ -41,16 +42,45 @@ fun! <SID>GetColShift() "{{{3
     end
 endf
 
-fun! <SID>GetFilename() "{{{3
+fun! <SID>Retrieve(field, default) "{{{3
+    if exists('b:glark_'. a:field)
+        return b:glark_{a:field}
+    endif
     let pos = <SID>SavePos()
     try
-        let ln = search('^\S', 'bW')
-        if ln
-            return simplify(b:glarkPWD .'/'. getline(ln))
-        elseif line('.') == 1
-            let li = getline(1)
+        let fld = '* '. a:field .': '
+        let li = search('\V\^'. fld)
+        if li
+            let b:glark_{a:field} = strpart(getline(li), strlen(fld))
+            return b:glark_{a:field}
+        else
+            return a:default
+        endif
+    finally
+        call <SID>RestorePos(pos)
+    endtry
+endf
+
+fun! <SID>Pwd() "{{{3
+    return <SID>Retrieve('PWD', expand('%:p:h'))
+endf
+
+fun! <SID>GetFilename() "{{{3
+    let min = exists('b:glarkBodyStart') ? b:glarkBodyStart : 1
+    if line('.') < min
+        return
+    endif
+    let pos = <SID>SavePos()
+    try
+        if line('.') == min 
+            let li = getline('.')
             if li =~ '^\S'
-                return simplify(b:glarkPWD .'/'. li)
+                return simplify(<SID>Pwd() .'/'. li)
+            endif
+        else
+            let ln = search('^\S', 'bW')
+            if ln
+                return simplify(<SID>Pwd() .'/'. getline(ln))
             endif
         endif
         echoerr 'Malformed output: No filename (make sure you have glark >= 1.7.5)'
@@ -87,8 +117,8 @@ fun! <SID>GetGlarkWin(args) "{{{3
         setlocal noswapfile
         setlocal buflisted
         setlocal winfixheight
-        set ft=glark
-        call GlarkKeys()
+        set filetype=glark
+        " call GlarkKeys()
     else
         exec wn .'wincmd w'
     endif
@@ -107,7 +137,107 @@ fun! <SID>HowManyWindows() "{{{3
     return i - 1
 endf
 
+fun! <SID>WinHeight() "{{{3
+    let ll = line('$')
+    if winheight(0) > ll && ll < g:glarkHeight
+        return ll
+    elseif g:glarkHeight != 0
+        return g:glarkHeight
+    else
+        return (&lines / 2)
+    endif
+endf
+
+fun! <SID>Run(args)
+    setlocal modifiable
+    silent exec '%!'. <SID>Var('glarkCommand') .' '. <SID>Var('glarkArgs') .' '. escape(a:args, '\#%')
+    norm! ggO* QUERY:
+    exec 'norm! ggO* ARG: '. a:args
+    exec 'norm! ggO* PWD: '. b:glark_PWD
+    setlocal nomodifiable
+    let t = @t
+    try
+        norm! gg"tyG
+        let output = @t
+    finally
+        let @t = t
+    endtry
+    " if line('$') == 1
+    if output == "\<c-j>"
+        wincmd c
+    else
+        if <SID>HowManyWindows() != 1
+            exec 'resize '. <SID>WinHeight()
+        endif
+        call GlarkParseExplain(a:args)
+    endif
+endf
+
+fun! GlarkUpdate() "{{{3
+    if &ft != 'glark'
+        echoerr 'Not a glark buffer'
+    else
+        let args = <SID>Retrieve('ARG', '')
+        if arg != ''
+            call <SID>Run(args)
+        endif
+    endif
+endf
+
+fun! GlarkParseExplain(...) "{{{3
+    let i = search('^\* QUERY:$')
+    if i == 0
+        let i = 1
+    endif
+    let h = 3
+    let args = ''
+    while h != 0
+        let i  = i + 1
+        let li = getline(i)
+        if h != 1
+            let m = matchstr(li, '^'. (h == 2 ? '[[:blank]]\+' : '') .'/\zs[^/]\+\ze/\w*')
+            " echom "DBG ". m
+            if m != ''
+                if args == ''
+                    let args = escape(m, '\')
+                else
+                    let args = args .'\|'. escape(m, '\')
+                endif
+                if h == 3
+                    let i = i + 1
+                    break
+                else
+                    let h = 1
+                endif
+            endif
+        endif
+        if li =~ '^[[:blank]]*\(any of:\|or\|within \d\+ lines\? of each other:\)$'
+            let h = 2
+        else
+            break
+        endif
+    endwh
+    if hlID('GlarkMatch')
+        silent syntax clear GlarkMatch
+    endif
+    if args == '' && a:0 >= 1 && a:1 != ''
+        let args = substitute(a:1, '\(\S\+\|\\ \)\+\s*$', '', 'g')
+        let args = escape(args, '/\')
+        let args = substitute(args, '\s\+', '\\|', 'g')
+        let args = substitute(args, '\\|$', '', '')
+    endif
+    if args != ''
+        " echom 'syntax match GlarkMatch /\V\c'. escape(args, '/') .'/'
+        exec 'syntax match GlarkMatch /\V\c'. escape(args, '/') .'/'
+        let @/ = '\V\c'. args
+    endif
+    let b:glarkBodyStart = i
+endf
+
 fun! GlarkJump(flags) "{{{3
+    if exists('b:glarkBodyStart') && line('.') < b:glarkBodyStart
+        return
+    endif
     let ln = <SID>GetLineNumber()
     if ln != ''
         let co = <SID>GetColShift()
@@ -147,56 +277,13 @@ fun! GlarkJump(flags) "{{{3
     endif
 endf
 
-if !exists('*GlarkKeys') "{{{2
-    fun! GlarkKeys() "{{{3
-        noremap  <silent> <buffer> <cr> :call GlarkJump('')<cr>
-        inoremap <silent> <buffer> <cr> <c-o>:call GlarkJump('')<cr>
-        noremap  <silent> <buffer> o :call GlarkJump('')<cr>
-        inoremap <silent> <buffer> o <c-o>:call GlarkJump('')<cr>
-        noremap  <silent> <buffer> p :call GlarkJump('p')<cr>
-        inoremap <silent> <buffer> p <c-o>:call GlarkJump('p')<cr>
-        noremap  <silent> <buffer> r :call GlarkJump('r')<cr>
-        inoremap <silent> <buffer> r <c-o>:call GlarkJump('r')<cr>
-        noremap  <silent> <buffer> f :call GlarkJump('f')<cr>
-        inoremap <silent> <buffer> f <c-o>:call GlarkJump('f')<cr>
-        noremap  <silent> <buffer> q :wincmd c<cr>
-        inoremap <silent> <buffer> q <c-o>:wincmd c<cr>
-        noremap  <silent> <buffer> <esc> :wincmd c<cr>
-        inoremap <silent> <buffer> <esc> <c-o>:wincmd c<cr>
-    endf
-endif
-
 fun! GlarkRun(args) "{{{3
     let bn = <SID>GetGlarkWin(a:args)
-    syntax clear GlarkMatch
-    let b:glarkPWD = expand("%:p:h")
-    setlocal modifiable
-    silent exec '%!'. <SID>Var('glarkCommand') .' '. <SID>Var('glarkArgs') .' '. a:args
-    setlocal nomodifiable
-    let t = @t
-    try
-        norm! gg"tyG
-        let output = @t
-    finally
-        let @t = t
-    endtry
-    " if line('$') == 1
-    if output == "\<c-j>"
-        wincmd c
-    else
-        if <SID>HowManyWindows() != 1
-            exec 'resize '. (winheight(0) > line('$') ? line('$') : g:glarkHeight)
-        endif
-        let args = substitute(a:args, '\(\S\+\|\\ \)\+\s*$', '', 'g')
-        let args = escape(args, '/\')
-        let args = substitute(args, '\s\+', '\\|', 'g')
-        let args = substitute(args, '\\|$', '', '')
-        exec 'syntax match GlarkMatch /\V'. args .'/'
-        let @/ = '\V'. args
-    endif
+    let b:glark_PWD = expand("%:p:h")
+    call <SID>Run(a:args)
 endf
 
-command! -nargs=* Glark call GlarkRun(<q-args>)
+command! -nargs=* -complete=file Glark call GlarkRun(<q-args>)
 
 
 finish
@@ -204,4 +291,15 @@ Change Log:
 
 0.1
 - initial release
+
+0.2
+- File completion for the :Glark command
+- Support folds
+- Use --explain option to construct @/ pattern
+- Bind double click to open file
+- GlarkUpdate() (bound to 'u')
+- GlarkKeys() is called from ftplugin -> glark is behaves like a proper 
+filetype now
+- If g:glarkHeight is 0, the window is set to &lines/2 at runtime.
+- Unset wrap before jumping to a line in the document
 
