@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     25-Jän-2006.
-" @Last Change: 29-Mrz-2006.
-" @Revision:    0.2.271
+" @Last Change: 31-Mrz-2006.
+" @Revision:    0.2.275
 
 if &cp || exists("loaded_glark") "{{{2
     finish
@@ -13,7 +13,6 @@ let loaded_glark = 1
 
 if !exists('g:glarkCommand')  | let g:glarkCommand = 'glark'    | endif "{{{2
 if !exists('g:glarkArgs')     | let g:glarkArgs = '-q -n -H -U --explain' | endif "{{{2
-" if !exists('g:glarkHeight')   | let g:glarkHeight = &lines / 2  | endif "{{{2
 if !exists('g:glarkHeight')   | let g:glarkHeight = 0           | endif "{{{2
 if !exists('g:glarkMultiWin') | let g:glarkMultiWin = 0         | endif "{{{2
 
@@ -21,7 +20,6 @@ fun! <SID>GetLineNumber() "{{{3
     let li = getline('.')
     let ln = matchstr(li, '^\s\+\zs\d\+')
     if ln == ''
-        " echoerr 'Malformed output: No linenumber in: '. li
         let ln = 1
     end
     return ln
@@ -31,7 +29,6 @@ fun! <SID>GetColShift() "{{{3
     let li = getline('.')
     let ln = matchend(li, '^\s\+\d\+ \([:+-] \)\?')
     if ln < 0
-        " echoerr 'Malformed output: No linenumber in: '. li
         return 1
     else
         if ln < col('.')
@@ -118,7 +115,6 @@ fun! <SID>GetGlarkWin(args) "{{{3
         setlocal buflisted
         setlocal winfixheight
         set filetype=glark
-        " call GlarkKeys()
     else
         exec wn .'wincmd w'
     endif
@@ -162,7 +158,6 @@ fun! <SID>Run(args)
     finally
         let @t = t
     endtry
-    " if line('$') == 1
     if output == "\<c-j>"
         wincmd c
     else
@@ -196,7 +191,6 @@ fun! GlarkParseExplain(...) "{{{3
         let li = getline(i)
         if h != 1
             let m = matchstr(li, '^'. (h == 2 ? '[[:blank]]\+' : '') .'/\zs[^/]\+\ze/\w*')
-            " echom "DBG ". m
             if m != ''
                 if args == ''
                     let args = escape(m, '\')
